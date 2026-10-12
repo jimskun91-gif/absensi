@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#0b1730">
-  <title>Pemindai QR Absensi Guru</title>
+  <title>Pemindai QR Absensi Guru (v3)</title>
   <style>
     :root{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;color:#152238;background:#f1f5f9}
     *{box-sizing:border-box}body{margin:0;min-height:100vh;padding:18px;display:grid;place-items:center}
@@ -13,30 +13,42 @@
     h1{margin:12px 0 7px;font-size:clamp(22px,6vw,30px)}p{line-height:1.55;color:#526179;font-size:14px;margin:8px 0}
     .notice{border:1px solid #bfdbfe;background:#eff6ff;color:#1e3a8a;border-radius:12px;padding:12px 14px;font-size:13px;line-height:1.5;margin:14px 0}
     .notice.error{border-color:#fecaca;background:#fef2f2;color:#991b1b}.notice.ok{border-color:#bbf7d0;background:#f0fdf4;color:#166534}
-    .actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:14px}button{min-height:46px;border:0;border-radius:11px;padding:10px 15px;font:inherit;font-size:14px;font-weight:750;cursor:pointer}
+    .actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:14px}
+    button{min-height:46px;border:0;border-radius:11px;padding:10px 15px;font:inherit;font-size:14px;font-weight:750;cursor:pointer}
     button:disabled{opacity:.6;cursor:wait}.primary{background:#1d4ed8;color:#fff;flex:1}.secondary{background:#e2e8f0;color:#1e293b}
     #reader{width:100%;overflow:hidden;border-radius:14px;background:#0f172a;margin-top:14px}#reader video{border-radius:12px}
+    #codeBox{display:none;margin-top:14px}
+    #codeBox textarea{width:100%;min-height:76px;font:13px ui-monospace,monospace;border:1px solid #cbd5e1;border-radius:10px;padding:10px;color:#0f172a;word-break:break-all}
     .origin{font-family:ui-monospace,monospace;font-size:12px;word-break:break-all;background:#f8fafc;padding:3px 6px;border-radius:5px;color:#334155}
     .small{font-size:12px;color:#718096}.hidden{display:none!important}
   </style>
 </head>
 <body>
   <main>
-    <span class="tag">Pemindai eksternal</span>
+    <span class="tag">Pemindai eksternal · v3</span>
     <h1>Scan QR Absensi</h1>
-    <p>Kamera dibuka dari halaman HTTPS terpisah karena portal Apps Script membatasi akses kamera di dalamnya. Setelah QR terbaca, hanya teks QR yang dikirim kembali ke Portal Guru; kata sandi dan token sesi tidak dikirim ke halaman ini.</p>
-    <div class="notice" id="originInfo">Memeriksa koneksi ke Portal Guru… (pemindai v2)</div>
+    <p>Kamera dibuka dari halaman HTTPS terpisah karena portal Apps Script membatasi akses kamera di dalamnya.</p>
+    <div class="notice" id="originInfo">Memeriksa koneksi ke Portal Guru…</div>
     <div id="scanStatus" class="notice" role="status">Tekan <b>Mulai kamera</b>, lalu izinkan akses kamera untuk situs pemindai ini.</div>
     <div id="reader" class="hidden"></div>
+    <div id="codeBox">
+      <p><b>Kode QR terbaca.</b> Tekan <b>Salin kode</b>, kembali ke Portal Guru, lalu tempel ke kolom <b>Kode QR manual</b> dan tekan <b>Kirim Kode QR</b>.</p>
+      <textarea id="codeText" readonly></textarea>
+      <div class="actions">
+        <button id="copyButton" class="primary" type="button" onclick="salinKode()">Salin kode</button>
+        <button id="scanAgainButton" class="secondary" type="button" onclick="pindaiLagi()">Pindai lagi</button>
+      </div>
+    </div>
     <div class="actions">
       <button id="startButton" class="primary" type="button" onclick="mulaiKamera()">📷 Mulai kamera</button>
-      <button id="closeButton" class="secondary" type="button" onclick="tutupPemindai()">Kembali ke portal</button>
+      <button id="closeButton" class="secondary" type="button" onclick="tutupPemindai()">Tutup</button>
     </div>
-    <p class="small">Situs pemindai ini: <span class="origin" id="scannerOrigin"></span>. Izin kamera untuk situs ini berbeda dari izin `script.google.com`.</p>
+    <p class="small">Situs pemindai ini: <span class="origin" id="scannerOrigin"></span></p>
   </main>
 <script>
-window.onerror=function(msg,src,line){var el=document.getElementById('originInfo');if(el){el.textContent='Skrip pemindai gagal: '+msg+' (baris '+line+'). Perbarui index.html di GitHub.';el.className='notice error'}return false};
 'use strict';
+window.onerror=function(msg,src,line){var el=document.getElementById('originInfo');if(el){el.textContent='Skrip pemindai gagal: '+msg+' (baris '+line+')';el.className='notice error'}return false};
+
 var params=new URLSearchParams(window.location.search);
 var returnOrigin=params.get('returnOrigin')||'';
 var nonce=params.get('nonce')||'';
@@ -45,6 +57,8 @@ var startButton=document.getElementById('startButton');
 var closeButton=document.getElementById('closeButton');
 var statusBox=document.getElementById('scanStatus');
 var reader=document.getElementById('reader');
+var codeBox=document.getElementById('codeBox');
+var codeText=document.getElementById('codeText');
 document.getElementById('scannerOrigin').textContent=window.location.origin;
 
 function originPortalDiizinkan(origin){
@@ -53,9 +67,11 @@ function originPortalDiizinkan(origin){
     return u.protocol==='https:'&&(host==='script.google.com'||host==='script.googleusercontent.com'||host.endsWith('.script.googleusercontent.com'));
   }catch(e){return false}
 }
-function portalSiap(){return !!(window.opener&&!window.opener.closed&&originPortalDiizinkan(returnOrigin)&&/^[a-f0-9]{48}$/i.test(nonce))}
+function portalTerhubung(){
+  try{return !!(window.opener&&!window.opener.closed&&originPortalDiizinkan(returnOrigin)&&/^[a-f0-9]{48}$/i.test(nonce))}catch(e){return false}
+}
 function kirimKePortal(type,extra){
-  if(!portalSiap())return false;
+  if(!portalTerhubung())return false;
   try{window.opener.postMessage(Object.assign({type:type,nonce:nonce},extra||{}),returnOrigin);return true}catch(e){return false}
 }
 function tampilkanStatus(text,kind){
@@ -63,13 +79,11 @@ function tampilkanStatus(text,kind){
 }
 function pesanKamera(e){
   var name=String(e&&e.name||''),message=String(e&&e.message||e||''),all=(name+' '+message).toLowerCase();
-  if(window.isSecureContext===false)return 'Halaman pemindai belum dibuka melalui HTTPS. Pastikan hosting mengaktifkan HTTPS.';
-  var policy=document.permissionsPolicy||document.featurePolicy;
-  try{if(policy&&typeof policy.allowsFeature==='function'&&!policy.allowsFeature('camera'))return 'Browser memblokir kamera untuk halaman ini karena kebijakan Permissions Policy. Buka halaman pemindai HTTPS secara langsung dan jangan menaruhnya di iframe.'}catch(ignore){}
-  if(/notallowed|permissiondenied|permission denied|not allowed|denied/.test(all))return 'Browser atau Android masih menolak kamera untuk situs pemindai '+window.location.hostname+'. Izinkan Kamera untuk situs ini pada pengaturan situs Chrome, lalu pastikan Setelan Android → Aplikasi → Chrome → Izin → Kamera juga diizinkan.';
-  if(/notfound|devicesnotfound|no camera|requested device/.test(all))return 'Kamera tidak ditemukan. Pastikan perangkat memiliki kamera dan tidak sedang dinonaktifkan.';
+  if(window.isSecureContext===false)return 'Halaman pemindai belum dibuka melalui HTTPS.';
+  if(/notallowed|permissiondenied|permission denied|not allowed|denied/.test(all))return 'Kamera ditolak oleh browser/Android untuk situs '+window.location.hostname+'. Izinkan Kamera di pengaturan situs Chrome dan izin Kamera Chrome di Android, lalu coba lagi.';
+  if(/notfound|devicesnotfound|no camera|requested device/.test(all))return 'Kamera tidak ditemukan di perangkat ini.';
   if(/notreadable|trackstart|could not start|in use/.test(all))return 'Kamera sedang dipakai aplikasi atau tab lain. Tutup aplikasi kamera lain, lalu coba lagi.';
-  return 'Kamera gagal dibuka: '+(message||'kesalahan tidak diketahui')+'. Periksa izin kamera untuk situs pemindai ini.';
+  return 'Kamera gagal dibuka: '+(message||'kesalahan tidak diketahui')+'.';
 }
 function muatLibrary(){
   if(typeof Html5Qrcode==='function')return Promise.resolve();
@@ -89,9 +103,9 @@ async function hentikanKamera(){
   reader.classList.add('hidden');reader.innerHTML='';
 }
 async function mulaiKamera(){
-  if(!portalSiap()){tampilkanStatus('Halaman ini harus dibuka dari tombol pemindai di Portal Guru. Buka kembali tab Portal Guru dan tekan Buka pemindai kamera.', 'error');return}
+  codeBox.style.display='none';scanSelesai=false;
   if(window.isSecureContext===false||!navigator.mediaDevices||typeof navigator.mediaDevices.getUserMedia!=='function'){
-    var error=new Error('NotAllowedError: getUserMedia tidak tersedia pada konteks ini.');tampilkanStatus(pesanKamera(error),'error');kirimKePortal('SCAN_ERROR',{message:pesanKamera(error)});return;
+    tampilkanStatus(pesanKamera(new Error('NotAllowedError: getUserMedia tidak tersedia pada konteks ini.')),'error');return;
   }
   startButton.disabled=true;startButton.textContent='Memuat pemindai…';tampilkanStatus('Meminta izin kamera dan menyiapkan pemindai…');
   try{
@@ -102,24 +116,34 @@ async function mulaiKamera(){
     scanner=new Html5Qrcode('reader',config);
     var side=Math.min(270,Math.max(180,(window.innerWidth||390)-88));
     await scanner.start({facingMode:'environment'},{fps:8,qrbox:{width:side,height:side},aspectRatio:1},function(code){if(!scanSelesai)hasilScan(code)},function(){});
-    startButton.classList.add('hidden');closeButton.textContent='Batalkan scan';tampilkanStatus('Kamera aktif. Arahkan QR ke dalam bingkai.');
+    startButton.classList.add('hidden');tampilkanStatus('Kamera aktif. Arahkan QR ke dalam bingkai.');
   }catch(e){
     await hentikanKamera();startButton.disabled=false;startButton.textContent='📷 Coba lagi';
-    var msg=pesanKamera(e);tampilkanStatus(msg,'error');kirimKePortal('SCAN_ERROR',{message:msg});
+    tampilkanStatus(pesanKamera(e),'error');
   }
 }
 async function hasilScan(code){
   if(scanSelesai)return;scanSelesai=true;
   var teks=String(code||'').trim();
-  tampilkanStatus('QR terbaca. Mengirim kode ke Portal Guru untuk validasi…','ok');
-  kirimKePortal('SCAN_RESULT',{code:teks});
   await hentikanKamera();
-  startButton.classList.add('hidden');closeButton.textContent='Tutup pemindai';
-  setTimeout(function(){try{window.close()}catch(e){}},500);
+  codeText.value=teks;codeBox.style.display='block';
+  var terkirim=kirimKePortal('SCAN_RESULT',{code:teks});
+  tampilkanStatus(terkirim?'QR terbaca dan dikirim ke Portal Guru.':'QR terbaca. Portal tidak terhubung otomatis, jadi salin kode di bawah lalu tempel ke Portal Guru.','ok');
+  startButton.classList.add('hidden');
+}
+async function salinKode(){
+  var teks=codeText.value;
+  try{await navigator.clipboard.writeText(teks);tampilkanStatus('Kode disalin. Kembali ke Portal Guru dan tempel di kolom Kode QR manual.','ok')}
+  catch(e){codeText.focus();codeText.select();tampilkanStatus('Tekan lama kode di kotak lalu pilih Salin.','error')}
+}
+function pindaiLagi(){
+  codeBox.style.display='none';startButton.classList.remove('hidden');startButton.disabled=false;startButton.textContent='📷 Mulai kamera';
+  mulaiKamera();
 }
 async function tutupPemindai(){
   await hentikanKamera();kirimKePortal('SCANNER_CLOSED',{});
   try{window.close()}catch(e){}
+  tampilkanStatus('Pemindai ditutup. Anda dapat kembali ke Portal Guru.','');
 }
 window.addEventListener('message',function(event){
   var data=event.data;
@@ -128,15 +152,19 @@ window.addEventListener('message',function(event){
 });
 window.addEventListener('pagehide',function(){try{if(scanner&&scanner.isScanning)scanner.stop()}catch(e){}});
 (function init(){
-  try{initInner()}catch(err){var el=document.getElementById('originInfo');if(el){el.textContent='Inisialisasi gagal: '+(err&&err.message||err);el.className='notice error'}}
-})();
-function initInner(){
-  if(!originPortalDiizinkan(returnOrigin)||!/^[a-f0-9]{48}$/i.test(nonce)||!window.opener||window.opener.closed){
-    tampilkanStatus('Koneksi portal tidak valid atau sudah ditutup. Kembali ke Portal Guru dan buka pemindai dari tombol di sana.','error');startButton.disabled=true;return;
+  try{
+    if(portalTerhubung()){
+      document.getElementById('originInfo').textContent='Terhubung ke Portal Guru. Hasil scan dikirim otomatis.';
+      kirimKePortal('SCANNER_READY',{});
+    }else{
+      document.getElementById('originInfo').textContent='Tidak terhubung otomatis ke Portal Guru. Anda tetap bisa memindai lalu menyalin kode ke Portal Guru.';
+      document.getElementById('originInfo').className='notice warn';
+    }
+  }catch(err){
+    document.getElementById('originInfo').textContent='Inisialisasi gagal: '+(err&&err.message||err);
+    document.getElementById('originInfo').className='notice error';
   }
-  document.getElementById('originInfo').textContent='Terhubung ke Portal Guru ('+returnOrigin+'). Hasil scan dikirim kembali hanya ke tab tersebut.';
-  kirimKePortal('SCANNER_READY',{});
-}
+})();
 </script>
-<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a497be5208eb7e23',t:'MTc5MTgyNTI5Mw=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</body>
 </html>
