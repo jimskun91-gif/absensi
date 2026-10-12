@@ -25,7 +25,7 @@
     <span class="tag">Pemindai eksternal</span>
     <h1>Scan QR Absensi</h1>
     <p>Kamera dibuka dari halaman HTTPS terpisah karena portal Apps Script membatasi akses kamera di dalamnya. Setelah QR terbaca, hanya teks QR yang dikirim kembali ke Portal Guru; kata sandi dan token sesi tidak dikirim ke halaman ini.</p>
-    <div class="notice" id="originInfo">Memeriksa koneksi ke Portal Guru…</div>
+    <div class="notice" id="originInfo">Memeriksa koneksi ke Portal Guru… (pemindai v2)</div>
     <div id="scanStatus" class="notice" role="status">Tekan <b>Mulai kamera</b>, lalu izinkan akses kamera untuk situs pemindai ini.</div>
     <div id="reader" class="hidden"></div>
     <div class="actions">
@@ -35,6 +35,7 @@
     <p class="small">Situs pemindai ini: <span class="origin" id="scannerOrigin"></span>. Izin kamera untuk situs ini berbeda dari izin `script.google.com`.</p>
   </main>
 <script>
+window.onerror=function(msg,src,line){var el=document.getElementById('originInfo');if(el){el.textContent='Skrip pemindai gagal: '+msg+' (baris '+line+'). Perbarui index.html di GitHub.';el.className='notice error'}return false};
 'use strict';
 var params=new URLSearchParams(window.location.search);
 var returnOrigin=params.get('returnOrigin')||'';
@@ -127,12 +128,15 @@ window.addEventListener('message',function(event){
 });
 window.addEventListener('pagehide',function(){try{if(scanner&&scanner.isScanning)scanner.stop()}catch(e){}});
 (function init(){
+  try{initInner()}catch(err){var el=document.getElementById('originInfo');if(el){el.textContent='Inisialisasi gagal: '+(err&&err.message||err);el.className='notice error'}}
+})();
+function initInner(){
   if(!originPortalDiizinkan(returnOrigin)||!/^[a-f0-9]{48}$/i.test(nonce)||!window.opener||window.opener.closed){
     tampilkanStatus('Koneksi portal tidak valid atau sudah ditutup. Kembali ke Portal Guru dan buka pemindai dari tombol di sana.','error');startButton.disabled=true;return;
   }
   document.getElementById('originInfo').textContent='Terhubung ke Portal Guru ('+returnOrigin+'). Hasil scan dikirim kembali hanya ke tab tersebut.';
   kirimKePortal('SCANNER_READY',{});
-})();
+}
 </script>
-<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a4979f751e59b809',t:'MTc5MTgyNDAyOA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a497be5208eb7e23',t:'MTc5MTgyNTI5Mw=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
