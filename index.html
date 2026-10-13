@@ -62,15 +62,21 @@ function pesanKamera(e){
   if(/notreadable|trackstart|could not start|in use/.test(all))return 'Kamera sedang dipakai aplikasi atau tab lain. Tutup aplikasi kamera lain, lalu tekan Mulai kamera.';
   return 'Kamera gagal dibuka: '+(message||'kesalahan tidak diketahui')+'.';
 }
+// Library disimpan di folder vendor/ (lebih cepat, tidak bergantung CDN). Jika tidak ada, coba CDN.
+function muatSkrip(src){
+  return new Promise(function(resolve,reject){
+    var script=document.createElement('script');script.async=true;script.src=src;
+    script.onload=function(){typeof Html5Qrcode==='function'?resolve():reject(new Error('Library pemindai tidak tersedia.'))};
+    script.onerror=function(){reject(new Error('gagal:'+src))};
+    document.head.appendChild(script);
+  });
+}
 function muatLibrary(){
   if(typeof Html5Qrcode==='function')return Promise.resolve();
   if(!libraryPromise){
-    libraryPromise=new Promise(function(resolve,reject){
-      var script=document.createElement('script');script.async=true;script.src='https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js';
-      script.onload=function(){typeof Html5Qrcode==='function'?resolve():reject(new Error('Library pemindai tidak tersedia.'))};
-      script.onerror=function(){reject(new Error('Library pemindai gagal dimuat. Periksa koneksi internet.'))};
-      document.head.appendChild(script);
-    }).catch(function(e){libraryPromise=null;throw e});
+    libraryPromise=muatSkrip('vendor/html5-qrcode.min.js')
+      .catch(function(){return muatSkrip('https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js')})
+      .catch(function(e){libraryPromise=null;throw new Error('Library pemindai gagal dimuat. Periksa koneksi internet.')});
   }
   return libraryPromise;
 }
@@ -129,5 +135,5 @@ window.addEventListener('pagehide',function(){try{if(scanner&&scanner.isScanning
   mulaiKamera();
 })();
 </script>
-</body>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a49f61e52cb24f19',t:'MTc5MTkwNTM5Mw=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
